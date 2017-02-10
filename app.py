@@ -20,6 +20,10 @@ CORS(app)
 
 db = SQLAlchemy(app)
 
+engine = create_engine(config.SQLALCHEMY_DATABASE_URI)
+SessionFactory = sessionmaker(bind=engine,autoflush=True,autocommit=False)
+Session = flask_scoped_session(SessionFactory, app)
+
 #
 # class: EmailSender
 # Description: Scheduling emails by timestamp and load pending form db
@@ -31,10 +35,11 @@ class EmailSender:
         self.schedulePendingEmails()
 
     def schedulePendingEmails(self):
-        print('Scheduling pending emails...')
         session = Session()
         # retrieve not sent emails from db
+        print('Retrieving pending emails...')
         pending_emails = session.query(Email).filter(Email.sent==False).all()
+        print('Scheduling pending emails...')
         for e in pending_emails:
             seconds = helpers.seconds_from_now(e.timestamp)
             if seconds > 0:
@@ -49,6 +54,7 @@ class EmailSender:
             # email's timestamp is expired
             return False
         else:
+            print("Scheduling email...")
             Timer(seconds, self.post, args=[email]).start()
             return True
 
@@ -116,10 +122,6 @@ class Email(db.Model):
 
 db.create_all()
 db.session.commit()
-
-engine = create_engine(config.SQLALCHEMY_DATABASE_URI)
-SessionFactory = sessionmaker(bind=engine,autoflush=True,autocommit=False)
-Session = flask_scoped_session(SessionFactory, app)
 
 
 # automaticaly schedule all pending emails on load
