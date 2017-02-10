@@ -25,12 +25,12 @@ SessionFactory = sessionmaker(bind=engine,autoflush=True,autocommit=False)
 Session = flask_scoped_session(SessionFactory, app)
 
 #
-# class: EmailSender
+# class: EmailScheduler
 # Description: Scheduling emails by timestamp and load pending form db
 #
 
 
-class EmailSender:
+class EmailScheduler:
     def __init__(self):
         self.schedulePendingEmails()
 
@@ -125,7 +125,7 @@ db.session.commit()
 
 
 # automaticaly schedule all pending emails on load
-sender = EmailSender()
+email_scheduler = EmailScheduler()
 
 #
 # Define app routes
@@ -156,7 +156,8 @@ def save():
                 timestamp=timestamp)
         sess.add(email)
         sess.commit()
-        return jsonify(saved=True, scheduled=sender.send(email), email=email.serialize)
+        task_result = email_scheduler.send(email)
+        return jsonify(saved=True, scheduled=task_result, email=email.serialize)
     except ValueError as err:
         return jsonify(saved=False, scheduled=False, error=err.args)
     finally:
