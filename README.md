@@ -7,7 +7,7 @@ Server app to schedule emails
 
 [POST /save_emails](https://email-scheduler-api.herokuapp.com/save_emails)
 <br>
-*Params:*
+Params:
 - event_id: integer
 - email_subject: string
 - email_content: string
