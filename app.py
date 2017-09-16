@@ -10,6 +10,8 @@ from sqlalchemy.orm import sessionmaker, validates
 from threading import Timer
 from dateutil import parser
 
+import email_scheduler
+import email
 import helpers
 import config
 
@@ -24,112 +26,13 @@ engine = create_engine(config.SQLALCHEMY_DATABASE_URI)
 SessionFactory = sessionmaker(bind=engine,autoflush=True,autocommit=False)
 Session = flask_scoped_session(SessionFactory, app)
 
-#
-# class: EmailScheduler
-# Description: Scheduling emails by timestamp and load pending form db
-#
-
-
-class EmailScheduler:
-    def __init__(self):
-        self.schedulePendingEmails()
-
-    def schedulePendingEmails(self):
-        session = Session()
-        # retrieve not sent emails from db
-        print('Retrieving pending emails...')
-        pending_emails = session.query(Email).filter(Email.sent==False).all()
-        print('Scheduling pending emails...')
-        for e in pending_emails:
-            seconds = helpers.seconds_from_now(e.timestamp)
-            if seconds > 0:
-                # email's timestamp is not expired
-                Timer(seconds, self.post, args=[e]).start()
-                print("Scheduled " + str(e))
-        Session.remove()
-
-    def send(self, email):
-        seconds = helpers.seconds_from_now(email.timestamp)
-        if seconds < 0:
-            # email's timestamp is expired
-            return False
-        else:
-            print("Scheduling email...")
-            Timer(seconds, self.post, args=[email]).start()
-            return True
-
-    def post(self, email):
-        session = Session()
-        session.add(email)
-        email.sent = True
-        session.commit()
-        print("Sending to " + str(email))
-        Session.remove()
-
-
-#
-# class: Email
-# Description: Descibes email model
-#
-
-
-class Email(db.Model):
-    __tablename__ = 'email'
-
-    id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(db.Integer, nullable=False)
-    subject = db.Column(db.String(255), default="")
-    content = db.Column(db.Text(), default="")
-    timestamp = db.Column(db.String(255), nullable=False)
-    sent = db.Column(db.Boolean, default=False)
-
-    def __init__(self, event_id, subject, content, timestamp):
-        self.event_id = event_id
-        self.subject = subject
-        self.content = content
-        self.timestamp = timestamp
-
-    def __repr__(self):
-        return '<id {}>'.format(self.id)
-
-    def __str__(self):
-        return 'event id: {0}, subject: {1}, on: {2}'.format(self.event_id,self.subject,self.timestamp)
-
-    @property
-    def serialize(self):
-       """Return object data in serializeable format"""
-       return {
-           'id': self.id,
-           'event_id': self.event_id,
-           'subject': self.subject,
-           'content': self.content,
-           'timestamp': self.timestamp,
-           'sent': self.sent
-       }
-
-    @validates('timestamp')
-    def validate_timestamp(self, key, ts):
-        ts_str = ""
-        try:
-            ts_str = str(helpers.to_utc(parser.parse(ts)))
-        except ValueError:
-            raise ValueError("Invalid timestamp format")
-        is_exp = helpers.seconds_from_now(ts_str) < 0
-        if is_exp:
-            raise ValueError("Timestamp is expired")
-        return ts_str
-
-
 db.create_all()
 db.session.commit()
-
 
 # automaticaly schedule all pending emails on load
 email_scheduler = EmailScheduler()
 
-#
-# Define app routes
-#
+# define app routes
 
 # retrieve emails from db
 @app.route('/emails', methods=['GET'])
@@ -163,11 +66,7 @@ def save():
     finally:
         Session.remove()
 
-
-#
 # execute module
-#
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     host = '0.0.0.0'
